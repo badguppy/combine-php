@@ -10,4 +10,4 @@ Features:
 6. User-defined application architecture
 7. Event queue
 
-Documentation: Coming Soon!
+Documentation: Coming Soon! See 'demo' folder for usage..
