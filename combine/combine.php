@@ -366,24 +366,108 @@
 				"%tail%" => ""
 			];
 
+			// Parse post params
+			if (isset($_SERVER["CONTENT_TYPE"])) {
+				$content_type = strtolower(trim(explode(";", $_SERVER["CONTENT_TYPE"])[0]));
+				if ($content_type == "application/json") {
+					try { $_POST = json_decode(file_get_contents("php://input"), true); }
+					catch (Exception $e) { self::log("Router warning", "Malformed request body or invalid content-type"); }
+				}
+			}
+
+			// Helper for dependency injection
+			$inject = function($vars, $vals, $httpvars, $presets, $url_trail = null) {
+				
+				// Prep
+				$params = [];
+				$params_opt = [];
+
+				// Helper append function
+				$append = function(&$master, &$slave) {
+					foreach($slave as $key => $value) {
+						if (isset($master[$key])) continue; 
+						else $master[$key] = $value;
+					}
+				};
+
+				// Segment Vars - Do we have any values ?
+				if (count($vals) > 0) {
+
+					// Trail Url						
+					if (isset($url_trail)) $vals[count($vals) - 1] .= (strlen($vals[count($vals) - 1]) > 0 ? "/" : "").$url_trail;
+
+					// Unnamed parameterization
+					if (count($vars) == 0) $params = $vals;
+
+					// Named parameterization
+					else {
+						$mixed = false;
+						$_params = [];
+
+						for($i = 0; $i < count($vars); $i++) {
+							if ($vars[$i] == "") {
+								$mixed = true;
+								$params[] = $vals[$i];
+							}
+							else $_params[$vars[$i]] = $vals[$i];
+						}
+
+						// If mixed named and unnamed, prefer sequential (unnamed) as primary marshall data store
+						if ($mixed) $params_opt = $_params;
+						else $params = $_params;
+					}
+				}
+
+				// HTTP Vars					
+				if ($httpvars & self::HTTP_VARS_POST) $append($params_opt, $_POST);
+				if ($httpvars & self::HTTP_VARS_GET) $append($params_opt, $_GET);
+				if ($httpvars & self::HTTP_VARS_COOKIE) $append($params_opt, $_COOKIE);	
+
+				// Interpolation Vars
+				$params_interpolate = array_merge(array_merge($params, $params_opt), $presets);
+				
+				// Done
+				return [$params, $params_opt, $params_interpolate];
+			};
+
 			// Length check for routing to root/default handler
 			if (strlen($url) == 0) {				
 				if (!isset(self::$routes[$router][$httpmethod][""])) {
 					if (self::$production) {
-						self::log("Router error", "Route (ROOT) handler is not set");
 						header('HTTP/1.0 404 Not Found', true, 404);
+						self::log("Router error", "Route (ROOT) handler is not set");						
 						return;
 					}
 					else self::error("Router error", "Route (ROOT) handler is not set");
 				}
 
 				else {
-					if (self::is_lambda(self::$routes[$router][$httpmethod][""]["handler"])) self::$routes[$router][$httpmethod][""]["handler"]();
-					else {
-						$func = self::interpolate(self::$routes[$router][$httpmethod][""]["handler"], $presets, true);
-						self::{$func}();
+					$level = &self::$routes[$router][$httpmethod][""];
+					$fn = null;
+					$proceed = false;					
+
+					// Prep handler - will fallback if prep fails
+					try {
+						$injection = $inject([], [], $level["httpvars"], $presets);
+						$fn = self::qualify($level["handler"], $injection[2]);
+						$params = self::marshall($fn, $injection[0], $injection[1], true);
+						$proceed = true;
 					}
-					return;
+					catch (Exception $e) { 
+						self::error("Router error", "Could not call route handler (".$fn.") for ".$url." - '".($e->getMessage())."'. Halting at root");
+					}
+
+					// Call handler - will not fallback on internal error
+					if ($proceed) {
+						try {
+							if (self::is_lambda($fn)) $fn(...$params);
+							else self::{$fn}(...$params);
+							return;
+						}
+						catch (Exception $e) {
+							self::error("Router error", "Route handler (".$fn.") for ".$url." threw error '".($e->getMessage())."'");
+						}
+					}
 				}
 			}
 
@@ -395,123 +479,71 @@
 				$level = &self::$routes[$router][$httpmethod];
 				$waypoints = [];
 				$vals = [];
-				$params = [];
-
-				// Helper for variable segment mapping & marshalling
-				$inject = function($vars, $vals, $httpvars, $presets, $url_trail = null) {
-					
-					// Prep
-					$params = [];
-					$params_opt = [];
-
-					// Helper append function
-					$append = function(&$master, &$slave) {
-						foreach($slave as $key => $value) {
-							if (isset($master[$key])) continue; 
-							else $master[$key] = $value;
-						}
-					};
-
-					// Segment Vars - Do we have any values ?
-					if (count($vals) > 0) {
-
-						// Trail Url						
-						if (isset($url_trail)) $vals[count($vals) - 1] .= (strlen($vals[count($vals) - 1]) > 0 ? "/" : "").$url_trail;
-
-						// Unnamed parameterization
-						if (count($vars) == 0) $params = $vals;
-
-						// Named parameterization
-						else {
-							$mixed = false;
-							$_params = [];
-
-							for($i = 0; $i < count($vars); $i++) {
-								if ($vars[$i] == "") {
-									$mixed = true;
-									$params[] = $vals[$i];
-								}
-								else $_params[$vars[$i]] = $vals[$i];
-							}
-
-							// If mixed named and unnamed, prefer sequential (unnamed) as primary marshall data store
-							if ($mixed) $params_opt = $_params;
-							else $params = $_params;
-						}
-					}
-
-					// HTTP Vars					
-					if ($httpvars & self::HTTP_VARS_POST) $append($params_opt, $_POST);
-					if ($httpvars & self::HTTP_VARS_GET) $append($params_opt, $_GET);
-					if ($httpvars & self::HTTP_VARS_COOKIE) $append($params_opt, $_COOKIE);	
-
-					// Interpolation Vars
-					$params_interpolate = array_merge(array_merge($params, $params_opt), $presets);
-					
-					// Done
-					return [$params, $params_opt, $params_interpolate];
-				};
+				$params = [];			
 
 				// Helper for fallback
 				$fallback = function() use (&$waypoints, &$inject, &$url, &$segments, &$presets) {
-
-					// traverse through each waypoint in reverse order
 					$index = count($waypoints) - 1;
+					$fn = null;
+					$params = null;
+
+					// Traverse through each waypoint in reverse order
 					while ($index >= 0) {
 
+						// Base - redirect
 						if ($waypoints[$index]["waypoint"] & self::ROUTE_BASE_REDIRECT) {
 							header('HTTP/1.1 301 Moved Permanently', true, 301);
 							header('Location: '.(self::$url_web)."/".$waypoints[$index]["url"]);
 						}
 						
+						// Base - normal
 						else {
-							try {								
+
+							// Prep handler - will fallback on prep error if not halt mode	
+							$proceed = false;						
+							try {
+
+								// Prep Tail						
 								$url_trail = ($waypoints[$index]["trail_var"] && ($waypoints[$index]["waypoint"] & self::ROUTE_BASE_TAIL)) ? implode("/", array_slice($segments, $waypoints[$index]["depth"] + 1)) : null;
 								$_presets = $presets;
-								if ($waypoints[$index]["trail_var"]) $_presets["%tail%"] = implode("/", array_slice($segments, $waypoints[$index]["depth"] + 1));
+								$_presets["%tail%"] = implode("/", array_slice($segments, $waypoints[$index]["depth"] + 1));
 
+								// Prep dependency injection / data store
 								$injection = $inject($waypoints[$index]["vars"], $waypoints[$index]["vals"], $waypoints[$index]["httpvars"], $_presets, $url_trail);
 
+								// Prep handlers
 								$fn = self::qualify($waypoints[$index]["handler"], $injection[2]);
 								$params = self::marshall($fn, $injection[0], $injection[1], true);
+								$proceed = true;	
 
-								if (self::is_lambda($fn)) $fn(...$params);
-								else self::{$fn}(...$params);
-								return;
 							}
-							catch (Exception $e) { 
-								if ($waypoints[$index]["waypoint"] & self::ROUTE_HALT) self::error("Router error", "Route handler (".$fn.") for ".$url." threw error '".($e->getMessage())."'. HALT");
+							catch (Exception $e) {
+								if ($waypoints[$index]["waypoint"] & self::ROUTE_HALT) self::error("Router error", "Could not call route handler (".$fn.") for ".$url." - '".($e->getMessage())."'. HALT");
+							}
 
-								self::log("Router error", "Route handler (".$fn.") for ".$url." threw error '".($e->getMessage())."'. Attempting to fall back.."); 
+							// Call handler - will not fallback if handler has internal error
+							if ($proceed) {
+								try {
+									if (self::is_lambda($fn)) $fn(...$params);
+									else self::{$fn}(...$params);
+									return;
+								}
+								catch (Exception $e) {
+									self::error("Router error", "Route handler (".$fn.") for ".$url." threw error '".($e->getMessage())."'");
+								}
 							}
-						}			
+						}		
 
 						$index--;
 					}
 
 					// Ran out of waypoints - nowhere to go				
 					if (self::$production) {
-						self::log("Router error", "Route handler is not set for url ".$url);
 						header('HTTP/1.0 404 Not Found', true, 404);
+						self::log("Router error", "Route handler is not set for url ".$url);						
 					}
 					else self::error("Router error", "Route handler is not set for url ".$url);
 				};
-
-				// Do we have a static waypoint at ROOT ?
-				if (isset(self::$routes[$router][$httpmethod][""]["waypoint"])) {
-					if (self::$routes[$router][$httpmethod][""]["waypoint"] != self::ROUTE_CHILD) {
-						$waypoints[] = [
-							"waypoint" => self::$routes[$router][$httpmethod][""]["waypoint"],
-							"url" => "",
-							"handler" => self::$routes[$router][$httpmethod][""]["handler"] ?? null,
-							"vars" => [],
-							"vals" => [],
-							"depth" => 0,
-							"trail_var" => false,
-							"httpvars" => self::$routes[$router][$httpmethod][""]["httpvars"]
-						];
-					}
-				}
 				
 				// Do we have a variable waypoint at ROOT ?
 				if (isset(self::$routes[$router][$httpmethod]["*"]["waypoint"])) {
@@ -565,21 +597,32 @@
 
 							// Is this level handled ?
 							if (isset($level["handler"])) {
+								$fn = null;
+								$proceed = false;
+
+								// Prep handler - will fallback if prep fails
 								try {
 									$injection = $inject($level["vars"], $vals, $level["httpvars"], $presets);
 									$fn = self::qualify($level["handler"], $injection[2]);
 									$params = self::marshall($fn, $injection[0], $injection[1], true);
-
-									if (self::is_lambda($fn)) $fn(...$params);
-									else self::{$fn}(...$params);
-									return;
+									$proceed = true;
 								}
 								catch (Exception $e) { 
-									if ($level["waypoint"] & self::ROUTE_HALT) self::error("Router error", "Route handler (".$fn.") for ".$url." threw error '".($e->getMessage())."'. HALT");
-
-									self::log("Router error", "Route handler (".$fn.") for ".$url." threw error '".($e->getMessage())."'. Attempting to fall back..");
+									if ($level["waypoint"] & self::ROUTE_HALT) self::error("Router error", "Could not call route handler (".$fn.") for ".$url." - '".($e->getMessage())."'. HALT");
 									$fallback();
 									return;
+								}
+
+								// Call handler - will not fallback on internal error
+								if ($proceed) {
+									try {
+										if (self::is_lambda($fn)) $fn(...$params);
+										else self::{$fn}(...$params);
+										return;
+									}
+									catch (Exception $e) {
+										self::error("Router error", "Route handler (".$fn.") for ".$url." threw error '".($e->getMessage())."'");
+									}
 								}
 							}
 
@@ -697,7 +740,14 @@
 			}
 
 			// Lambda
-			else $refFunc = new ReflectionFunction($fn);	
+			else $refFunc = new ReflectionFunction($fn);
+
+			// Helper - for unavailable arguements to parameters
+			$skip = function(string &$var, &$fn, &$param) use ($strict) {
+				if ($strict) self::error("Marshall error", "Type conversion failed for given arguement to parameter (".$var.") for function ".$fn);
+				else if ($param->isOptional()) return true;
+				else return false;
+			};
 			
 			// Does the callable have a definition?
 			$num = $refFunc->getNumberOfParameters();
@@ -709,34 +759,49 @@
 					// Add array sequentially to args
 					$args = array_slice($params, 0, $num);
 					
-					// Check if all parameters were fulfilled
-					if ($num > count($params)) {
+					// Go over each parameters
+					$count = 0;
+					foreach($refFunc->getParameters() as $param) {
+						$var = $param->getName();	
 
-						// Named marshall
-						$count = 0;
-						foreach($refFunc->getParameters() as $param) {
+						// Skip those already marshalled
+						if ($count < count($params)) {
 
-							// Skip those already marshalled
-							if ($count < count($params)) {
-								$count++;
-								continue;
-							}
-
-							// Reflect Name
-							$var = $param->getName();									
-							
-							// Normal marshall
-							if ($param->isVariadic() === false) {
-								$val = null;
-								
-								if (isset($params_opt[$var])) {
-									$val = $params_opt[$var];
-									unset($params_opt[$var]);
+							// Type cast 
+							if ($param->hasType()) {
+								if (!settype($args[$count], (string) $param->getType())) {
+									if ($skip($var, $fn, $param)) break;
+									else $args[$count] = null;
 								}
-								else if (!$param->isOptional() && $strict) self::error("Marshall error", "Arguement to non-optional parameter (".$var.") is missing for function ".$fn);
-
-								$args[] = $val;						
 							}
+
+							$count++;
+							continue;
+						}															
+						
+						// Normal marshall
+						if ($param->isVariadic() === false) {
+							$val = null;
+							
+							if (isset($params_opt[$var])) {
+								$val = $params_opt[$var];
+								unset($params_opt[$var]);
+
+								// Type cast
+								if ($param->hasType()) {
+									if (!settype($val, (string) $param->getType())) {
+										if ($skip($var, $fn, $param)) break;
+										else $val = null;
+									}
+								}
+							}
+
+							else {
+								if ($skip($var, $fn, $param)) break;
+								else $val = null;
+							}
+
+							$args[] = $val;						
 						}
 					}
 				}
@@ -753,14 +818,48 @@
 							if (isset($params[$var])) {
 								$val = $params[$var];
 								unset($params[$var]);
+
+								// Type cast - on non-opt data store injection
+								if ($param->hasType()) {
+									if (!settype($val, (string) $param->getType())) {
+
+										// Fall back to opt data store
+										if (isset($params_opt[$var])) {
+											$val = $params_opt[$var];
+											unset($params_opt[$var]);
+
+											// Type cast - on opt data store injection
+											if (!settype($val, (string) $param->getType())) {
+												if ($skip($var, $fn, $param)) break;
+												else $val = null;
+											}
+										}
+
+										else {
+											if ($skip($var, $fn, $param)) break;
+											else $val = null;
+										}										
+									}
+								}
 							}
 
 							else if (isset($params_opt[$var])) {
 								$val = $params_opt[$var];
 								unset($params_opt[$var]);
+
+								// Type cast - on opt data store injection
+								if ($param->hasType()) {
+									if (!settype($val, (string) $param->getType())) {
+										if ($skip($var, $fn, $param)) break;
+										else $val = null;
+									}
+								}
 							}
 
-							else if (!$param->isOptional() && $strict) self::error("Marshall error", "Arguement to non-optional parameter (".$var.") is missing for function ".$fn);
+							else {
+								if ($skip($var, $fn, $param)) break;
+								else $val = null;
+							}
 
 							$args[] = $val;						
 						}
@@ -829,7 +928,7 @@
 
 		// This will remove the specified handler from intercepting a hooked global function call.
 		public static function unhook(string $fn, string $handler) {
-			trigger_error("Fatal interceptor error - Unhook is not implemented!", E_USER_ERROR);
+			self::error("Interceptor error" ,"Unhook is not implemented");
 		}
 
 		// This setting allows handler chaining, at the cost of losing ability to send params & result of function call by reference to handlers.
@@ -907,17 +1006,17 @@
 		public static $logger;
 
 		// Logger interface
-		public static function log(string $short, string $long) {
+		public static function log(string $short, string $long, bool $echo = null) {
 			if (is_callable(self::$logger)) self::$logger($short, $long);
-			if (!self::$production) {
+			if ((!isset($echo) && !self::$production) || ($echo === true)) {
 				echo "<pre>LOGGER: <small><b>".$short." - ".$long."</b><br/><i>Turn on production mode to stop seeing logger msgs.</i></small></pre>";
 				ob_flush();
 			}		
 		}
 
 		// This will trigger an user error and optionally log the error
-		public static function error(string $short, string $long, $log = true) {
-			if ($log) self::log($short, $long);		
+		public static function error(string $short, string $long, bool $log = true, bool $echo = true) {
+			if ($log) self::log($short, $long, $echo);		
 			throw new Exception($short." - ".$long);
 		}
 
