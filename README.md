@@ -268,7 +268,7 @@ After Combine forms the qualified handler for a matched route, it inspects the h
 Combine **NEEDS** ALL the non-optional parameters in the controller function protoype to be available, or the function to be variadic or lacking any parameters. In any other case it will attempt a fallback to a `BASE`.
 
 Combine provides the following extra variables for Interpolation and/or Dependency Injection. **Note** the *%* sign to seperate it from user-defined variables from other data stores like `GET`.
-1. `%method%` The current http method being called
+1. `%method%` The current http method being called. This can be used to create RESTful APIs.
 2. `%tail%` The trailing url, if defined as a `BASE` route.
 
 
