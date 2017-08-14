@@ -42,7 +42,7 @@ Table of Contents
 	- Examples	
 	
 - Routes
-	- Defining Routes
+	- Defining HTTP Routes
 	- Serving HTTP Requests
 	- Examples
 	
@@ -149,7 +149,7 @@ Combine refers to a directory, or file, or a bunch of files as a *Component*. Co
 
 ### Defining Components
 
-A Component is defined by calling the `component` method. It takes 3 parameters - 
+A Component is defined by calling the static method `component` of the Combine class. It takes 3 parameters - 
 - `*string* $component_type` Defines the type of the component. It is used when loading components of this type.
 - `*string* $path` An interpolated string representing the path to be parsed for loading components of this type.
 - `*mixed* $logic` The loading logic. This can be 
@@ -193,7 +193,7 @@ This assumes that the variables `component_nam` and `func_name` are available to
 
 
 
-## Autoloading Classes
+### Autoloading Classes
 
 While not supported as of yet, it the very next feature planned and will be able to offer flexible autoloading with minimal coding. It will utilize same concepts as components
 
@@ -232,15 +232,55 @@ i::plugin("someplugin");
 ```
 
 
+## Routes
+### Defining HTTP Routes
+
+HTTP Routes are defined by calling the static method `route` of the Combine class. The following parameters are accepted
+- `*int* $httpmethods` Defined which HTTP methods this route supports - can be used for RESTful routing. It is a combination of the following flag constants defined in the *helper.php* file - `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `OPTIONS`, `HEAD` and `CONNECT`
+- `*string* $url` The templated URL to match for this route.
+- `*mixed* $handler` The handler for this route. Interpolated. Can also accept a lambda function.
+- `*int* $opts` Options (constant flags) on how to handle the routing, which can be a combination of the following
+	- `CHILD` Default. This means this is a child route.
+	- `BASE` This is the parent of other nested routes. Undefined routes or fallbacks can happen to this route.
+	- `REDIRECT` To be used with `BASE`. Means any fallback to this route will happen via a HTTP 302 redirect.
+	- `TAIL` To be used with `BASE`. Means any trailing URL segments upon fallback should be added to the last variable segment.
+	- `HALT` Do not fallback from this route. Will stop avalanche fallbacks to parent routes and instead show an error.
+- `*int* $httpvars`	Options (constant flags) that define which of the following data stores to be included for dependency injection and interpolation. Defaults to `GET|POST`.
+	- `NONE` Make nothing available
+	- `GET` Make HTTP GET parameters available.
+	- `POST`Make HTTP POST parameters avilable. Combine will use the *Content-Type* request header to parse POST params from the request body. Supports *application/json* and *application/x-www-form-urlencoded*.
+	- `COOKIES` Make cookies available.
+- `*string* $router` Optional. You can define routes on different routers and chain them together using this. This defines the name of the router to define the route on. Defaults to `Null`.
+
+Combine router allows variable segments to be used for routing. It can also extract the value of the segment as a variable and make it available for Ddependency Injection for the handler string or the handler itself. The *extraction sigil* `:` is used to denote a variable segment in a route URL. The name of the variable is after the sigil. For example
+```php
+i::route(GET, "app/:var/something", "module > somemodulename > {{var}}");
+```
+
+The above code will extract the value of the second URL segment `:var` and use it to interpolate the handler and form the function name. In effect, for an HTTP GET request to 'app/foo/something' have the following effect - 
+1. Load component 'module' named 'somemodulename'
+2. Execute a function called 'foo', since that is the value of the second URL segment.
+
+In addition to the variables derived from the URL, Combine can also provide variables from `GET`, `POST` and `COOKIE` parameters. The same can be used a key-value pair to interpolate the handler string.
+
+After Combine forms the qualified handler for a matched route, it inspects the handler by *reflecting* on it. Combine tries to understand the function prototype and determines if all the non-optional parameters in the function signature are avail from the data stores. If yes, it calls the function. Else it tries to fallback to a parent route declared as `BASE`.
+
+Combine **NEEDS** ALL the non-optional parameters in the controller function protoype to be available, or the function to be variadic or lacking any parameters. In any other case it will attempt a fallback to a `BASE`.
+
+Combine provides the following extra variables for Interpolation and/or Dependency Injection. **Note** the *%* sign to seperate it from user-defined variables from other data stores like `GET`.
+1. `%method%` The current http method being called
+2. `%tail%` The trailing url, if defined as a `BASE` route.
 
 
+## Serving HTTP Requests
+
+To serve the request by reading run-time values parsed by PHP (REQUEST_URI etc.), call the method `serve` on the Combine class.
+
+```php
+i::serve();
+```
 
 
-
-
-
-
-
-
-
-
+### More Documentation
+Coming Soon...
+Please ***star*** this repository to support it's development for the public. Your suggestions & criticisms will be appreciated much.
