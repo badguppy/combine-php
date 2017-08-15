@@ -80,7 +80,7 @@ If you want to start developing your application, skip the next two sections and
 ## Architecture
 ### Coding Paradigm
 
-While as of now a few of Combine's features do not fully supporting objects (Ex. unit-testing), it is my full intention to support and encourage Object-Oriented development and the same is in the plans for the immediate future. Combine can be used for quickly prototyping APIs etc. While it offers a lot of features that work well with procedural or functional paradigms, it can have MVC architecture for developing apps as well.
+While as of now a few of Combine's features do not fully support objects (Ex. unit-testing), it is my full intention to support and encourage Object-Oriented development and the same is in the plans for the immediate future. Combine can be used for quickly prototyping APIs etc. While it offers a lot of features that work well with procedural or functional paradigms, it can have MVC architecture for developing apps as well.
 
 
 ### Directory Structure
