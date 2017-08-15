@@ -148,7 +148,7 @@ To register an autoloader for a class/interface, call the static method `classif
 - *`string`* `$class` A fully qualified (and namespace'd) class name.
 - *`string`* `$path` A file path (directory and filename without the '.php' extension). Supports interpolation.
 
-Calling `classify()` will register the autoloader using `spl_autoload_register()` on Combine's static method `autoload()`. The autoloader allows variable namespace segments to be used for deducing the class file path. It can extract the value of the namespace as a variable and make it available for Ddependency Injection for creating the file path at runtime. The *extraction sigil* `:` is used to denote a variable namespace segment. The name of the variable is after the sigil. For example
+Calling `classify()` will register the autoloader using `spl_autoload_register()` on Combine's static method `autoload()`. The autoloader allows variable namespace segments to be used for deducing the class file path. It can extract the value of the namespace as a variable and make it available for Dependency Injection for creating the file path at runtime. The *extraction sigil* `:` is used to denote a variable namespace segment. The name of the variable is after the sigil. For example
 ```php
 i::classify(":cls", "src/vendor/{{cls}}");
 $obj = new foo\bar();
@@ -167,9 +167,7 @@ The above code will form the file path 'src/vendor/bar_baz.php' and autoload cla
 
 ### Defining Components
 
-A well-designed class heirarchy and directory tree may not be available when you just want to prototype your application and focus on the business logic. Combine allows you to write procedural code and still be able to modularize it without needing a class. This is called a *Component*. 
-
-Combine refers to a directory, or file, or a bunch of files as a *Component*. Components are used for writing modular code, lazy-loading etc. Combine offers features to define directories or files as components and load them as required at runtime. While it does not support class auto-loading (`spl_autoload_register`) yet, it is planned in the very next iteration.
+A well-designed class heirarchy and directory tree may not be available when you just want to prototype your application and focus on the business logic. Combine allows you to write procedural code and still be able to modularize it without needing a class. This is called a *Component*. Combine refers to any directory, or file, or a bunch of files as a *Component* and let's you load them as required at runtime. 
 
 A Component is defined by calling the static method `component` of the Combine class. It takes 3 parameters - 
 - `*string* $component_type` Defines the type of the component. It is used when loading components of this type.
@@ -268,7 +266,7 @@ HTTP Routes are defined by calling the static method `route` of the Combine clas
 	- `COOKIES` Make cookies available.
 - `*string* $router` Optional. You can define routes on different routers and chain them together using this. This defines the name of the router to define the route on. Defaults to `Null`.
 
-Combine router allows variable segments to be used for routing. It can also extract the value of the segment as a variable and make it available for Ddependency Injection for the handler string or the handler itself. This is similar to how the Combine autoloader for classes work. The *extraction sigil* `:` is used to denote a variable segment in a route URL. The name of the variable is after the sigil. For example
+Combine router allows variable segments to be used for routing. It can also extract the value of the segment as a variable and make it available for Dependency Injection for the handler string or the handler itself. This is similar to how the Combine autoloader for classes work. The *extraction sigil* `:` is used to denote a variable segment in a route URL. The name of the variable is after the sigil. For example
 ```php
 i::route(GET, "app/:var/something", "module > somemodulename > {{var}}");
 ```
