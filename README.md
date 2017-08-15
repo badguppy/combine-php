@@ -59,6 +59,8 @@ Combine consists of two files - *combine.php* and *helper.php*. As of right now,
 
 2. The *helper.php* file will be automatically loaded. It defines a few shortened constants, referencing the long names in the Combine Class. If they conflict with constants defined by your application, you can edit this file to rename the constants that conflict. This file also defines a PHP *class-alias* for the `Combine` class - `i`.
 
+3. Setup your web server to direct all incoming HTTP file ('.php' extension) and directory requests within your application folder to your 'index.php'. This is required as Combine uses URL segments for routing.
+
 When using combine, all framework functionalities are to be accessed via calling them statically on the `Combine` class or the short-hand `i` class, like so
 ```php
 Combine::hello();
