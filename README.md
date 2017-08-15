@@ -5,11 +5,11 @@ v0.2 alpha
 ## About Combine
 Combine is a light-weight web framework in PHP which focuses on minimal bootstrapping, flexible architecture and low verbosity. This framework is being developed by me as a part-time project, for use in quickly prototyping PHP web applications. It supports the following features as of now, with many more features planned - 
 
-- RESTful Routing 
+- RESTful & Late-binding Routes
 - HTTP RPC
 - Dependency Injection 
 - Lazy loading (PSR-0/4)
-- Procedural Unit-Testing
+- Functional Unit-Testing
 
 Planned features - 
 
