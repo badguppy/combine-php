@@ -131,15 +131,15 @@
 		// Combine operation mode
 		public static $production = false;
 
-		// Component Loader
+		// Index.php location
+		public static $url_local = "";
+		public static $url_web = "";
+
+		// Lazy Loaders
 		// ------------------------------------------------
 
 		// Component registry
 		public static $components;
-
-		// Index.php location
-		public static $url_local = "";
-		public static $url_web = "";
 
 		// Default component loading logic
 		const LOAD_FILE = 1;
@@ -152,8 +152,8 @@
 			self::$components[$component_type] = [
 				"path" => isset($path) ? trim($path, "\\/ ") : $component_type,
 				"logic" => &$logic
-			];
-		}
+			];			
+		}	
 
 		// This will load the given component
 		public static function load(string $component_type, string $component_name, $buffer = false) {
@@ -200,6 +200,195 @@
 				// Flush buffer
 				if ($buffer) return ob_end_flush();
 			}
+		}
+
+		// Class registry
+		public static $autoloads = [];
+		private static $autoload_registered = false;
+
+		// This function defines an class autoloading route
+		public static function classify(string $class, string $path) {
+			
+			// Register autoloader
+			if (!self::$autoload_registered) {
+				spl_autoload_register("Combine::autoload");
+				self::$autoload_registered = true;
+			}
+
+			// Remove preceding slash if any		
+			if ($class[0] == "\\") $class = substr($class, 1);			
+
+			// Parse & Prep
+			$segments = explode("\\", $class);
+			$depth = 0;
+			$vars = [];
+			$level = &self::$autoloads;
+
+			// Traverse down, creating the tree
+			while($depth < count($segments)) {
+
+				// Get next segment
+				$segment = $segments[$depth];
+
+				// Parse if segment variable available
+				if ($segment[0] == self::EXTRACTOR_SIGIL) {
+					$var = "";
+
+					// Is named var ?								
+					if (strlen($segment) > 1) {
+						$var = substr($segment, 1);
+						if (in_array($var, $vars)) self::error("Autoloader error", "Namespace variable (".$var.") used more than once in qualified namespace/class ".$class);
+					}
+
+					// unnamed var not allwed
+					else self::error("Autoloader error", "Unnamed namespace variable in qualified namespace/class ".$class);			
+					
+					// Add to var to segment variables array, mark this namespace as variadic
+					$vars[] = $var;
+					$segment = "*";						
+				}
+
+				// Create segment at this depth if it doesnt exist
+				if (!isset($level[$segment])) $level[$segment] = ["\\" => []];
+				
+				// Proceed to next segment		
+				$level = &$level[$segment];		
+				if ($depth < count($segments) - 1) $level = &$level["\\"];
+				$depth ++;
+			}
+
+			// At correct depth now - Add the path, vars
+			$level["path"] = $path;		
+			$level["vars"] = $vars;
+		}
+
+		// This is used as an autoloading logic to match the class routing tree
+		public static function autoload(string $class) {
+
+			// Remove preceding slash if any		
+			if ($class[0] == "\\") $class = substr($class, 1);			
+
+			// Parse & Prep
+			$segments = explode("\\", $class);
+			$depth = 0;
+			$vars = [];
+			$vals = [];
+			$level = &self::$autoloads;
+			$level_namespace = null;
+			$is_trail_var = false;
+
+			// Presets
+			$presets = [ '%tail%' => '' ];
+
+			// Helper for dependency injection
+			$inject = function($vars, $vals, $presets, $trail = null) {
+				
+				// Prep
+				$params_interpolate = [];
+
+				// Segment Vars - Do we have any values ?
+				if (count($vals) > 0) {
+
+					// Trail Url						
+					if (isset($trail)) $vals[count($vals) - 1] .= (strlen($vals[count($vals) - 1]) > 0 ? "/" : "").$trail;
+
+					// Unnamed parameterization
+					if (count($vars) == 0) $params_interpolate = $vals;
+
+					// Named parameterization
+					else {
+						$mixes = 0;
+						for($i = 0; $i < count($vars); $i++) {							
+							if ($vars[$i] == "") {
+								$params_interpolate[$mixes] = $vals[$i];
+								$mixes ++;
+							}
+							else $params_interpolate[$vars[$i]] = $vals[$i];
+						}
+					}
+				}
+
+				// Add presets
+				$params_interpolate += $presets;
+				
+				// Done
+				return $params_interpolate;
+			};
+
+			// Helper to Autoload
+			$load = function(&$level_namespace) use (&$class, &$segments, &$depth, &$vals, &$presets, &$is_trail_var, &$inject) {
+				try {
+
+					$trail = ($is_trail_var && ($depth > 0)) ? implode("/", array_slice($segments, $depth)) : null;
+					$_presets = $presets;
+					$_presets["%tail%"] = $trail ?? '';
+					$params_interpolate = $inject($level_namespace["vars"], $vals, $_presets, $trail);
+					$path = self::interpolate($level_namespace["path"], $params_interpolate, true);
+
+				}
+				catch (Exception $e) {
+					if (!self::$production) self::log("Autoloader warning", "Could not interpolate path for ".$class." - '".($e->getMessage())."'");
+					return;
+				}
+
+				$path = self::str_url($path).'.php';
+				if (!file_exists($path)) {
+					if (!self::$production) self::log("Autoloader warning", "File ".$path." not found for autoloading ".$class);
+				}
+				else require_once $path;
+			};
+
+			// Traverse down			
+			while($depth < count($segments)) {
+
+				// Get next segment
+				$segment = $segments[$depth];
+				$traverse = false;					
+					
+				// Variable avail
+				if (!isset($level[$segment])) {
+					if (isset($level["*"])) {
+						$traverse = true;
+						$is_trail_var = true;
+
+						$vals[] = $segment;
+						$segment = "*";
+					}
+				}
+
+				// Exact match
+				else {
+					$traverse = true;
+					$is_trail_var = false;
+				}
+
+				// Is traversal possible
+				if ($traverse) {
+					$level = &$level[$segment];
+					$level_namespace = $level;
+
+					// Did we run out of more segments
+					if ($depth == count($segments) - 1) {
+						if (isset($level["path"])) $load($level);
+						else if (!self::$production) self::log("Autoloader error", "Could not find path for ".$class);
+						return;
+					}			
+				}
+
+				// Ran out of routes - Was last matched segment variadic and handled ??
+				else {
+					if ($is_trail_var && isset($level_namespace["path"])) $load($level_namespace);
+					else if (!self::$production) self::log("Autoloader error", "Could not find path for ".$class);
+					return;
+				}
+				
+				// Proceed to next segment	
+				$level = &$level["\\"];
+				$depth ++;
+			}
+
+			// Ran Out of segments !!!! THIS SHOULD BE UNREACHABLE ??????????
+			if (!self::$production) self::log("Autoloader warning", "Could not find path for ".$class);
 		}
 
 		// Router
@@ -251,7 +440,7 @@
 			if ($httpmethods & self::HTTP_METHOD_HEAD) $methods[] = "HEAD";
 			if ($httpmethods & self::HTTP_METHOD_CONNECT) $methods[] = "CONNECT";
 
-			// Create router is not existant
+			// Create router if not existant
 			if (!isset(self::$routes[$router])) {
 				self::$routes[$router] = [
 					"GET" => [],
@@ -382,14 +571,6 @@
 				$params = [];
 				$params_opt = [];
 
-				// Helper append function
-				$append = function(&$master, &$slave) {
-					foreach($slave as $key => $value) {
-						if (isset($master[$key])) continue; 
-						else $master[$key] = $value;
-					}
-				};
-
 				// Segment Vars - Do we have any values ?
 				if (count($vals) > 0) {
 
@@ -418,10 +599,10 @@
 					}
 				}
 
-				// HTTP Vars					
-				if ($httpvars & self::HTTP_VARS_POST) $append($params_opt, $_POST);
-				if ($httpvars & self::HTTP_VARS_GET) $append($params_opt, $_GET);
-				if ($httpvars & self::HTTP_VARS_COOKIE) $append($params_opt, $_COOKIE);	
+				// HTTP Vars		
+				if ($httpvars & self::HTTP_VARS_POST) $params_opt += $_POST;
+				if ($httpvars & self::HTTP_VARS_GET) $params_opt +=  $_GET;
+				if ($httpvars & self::HTTP_VARS_COOKIE) $params_opt +=  $_COOKIE;	
 
 				// Interpolation Vars
 				$params_interpolate = array_merge(array_merge($params, $params_opt), $presets);
@@ -678,6 +859,12 @@
 			
 			// Lambda
 			if (self::is_lambda($handler)) return $handler;
+
+			// Array callable
+			elseif (is_array($handler)) {
+				// ADD LOGIC
+
+			}
 			
 			// Unqualified function
 			else if (substr_count($handler, self::QUALIFIER_SIGIL) == 0) {
@@ -718,10 +905,19 @@
 			
 			// Prep
 			$refFunc;
-			$args = [];
+			$args = [];			
+
+			// Lambda
+			if (self::is_lambda($fn)) $refFunc = new ReflectionFunction($fn);
+
+			// Array Callable
+			else if (is_array($fn)) {
+				// Add Logic - fn should already be qualified by now !!!! should this block exist?
+
+			}
 
 			// String-ular callable
-			if (!self::is_lambda($fn)) {
+			else {
 				// Function
 				if (strstr($fn, "::") === false) {
 					try { $refFunc = new ReflectionFunction($fn); }
@@ -738,9 +934,6 @@
 					}
 				}
 			}
-
-			// Lambda
-			else $refFunc = new ReflectionFunction($fn);
 
 			// Helper - for unavailable arguements to parameters
 			$skip = function(string &$var, &$fn, &$param) use ($strict) {
