@@ -142,9 +142,9 @@ Dependency injection is also used in calling functions which are defined as *han
 ## Lazy Loading
 ### Autoloading Classes
 
-Combine facilitates a very flexible class-to-file autoloading relation. Combine's autoloader is fully compliant with PSR-0/4 spec. The class directory tree is user-defined, hence making is compliant to any current or future standards. The Combine autoloader uses the PHP function `spl_autoload_register()` to accomplish this feature.
+Combine facilitates a very flexible class-to-file autoloading relation. Combine's autoloader is fully compliant with PSR-0/4 spec. The class directory tree is user-defined, hence making it compliant to any current or future standards. The Combine autoloader uses the PHP function `spl_autoload_register()` to accomplish this feature.
 
-To register an autoloader for a class, call the static method `classify()`. This method take the following two parameters
+To register an autoloader for a class/interface, call the static method `classify()`. This method take the following two parameters
 - *`string`* `$class` A fully qualified (and namespace'd) class name.
 - *`string`* `$path` A file path (directory and filename without the '.php' extension). Supports interpolation.
 
