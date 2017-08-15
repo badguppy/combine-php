@@ -1,5 +1,5 @@
 # Combine PHP
-v0.1 alpha
+v0.2 alpha
 
 
 ## About Combine
@@ -8,14 +8,13 @@ Combine is a light-weight web framework in PHP which focuses on minimal bootstra
 - RESTful Routing 
 - HTTP RPC
 - Dependency Injection 
-- Component Loading
+- Lazy loading (PSR-0/4)
 - Procedural Unit-Testing
 
 Planned features - 
 
-- PSR-0/4 Spec Autoloading
-- Objective Unit-Testing
-- Event Pipeline
+- Object Unit-Testing
+- Pipelines
 - Plugins
 - Server-Sent Events
 
@@ -34,11 +33,11 @@ Table of Contents
 	- Late Binding Through Interpolation
 	- Dependency Injection
 
-- Components
+- Lazy Loading
+	- Autoloading Classes
 	- Defining Components
 	- Loading Components
-	- Components & Handlers
-	- Autoloading Classes
+	- Components & Handlers	
 	- Examples	
 	
 - Routes
@@ -81,9 +80,7 @@ If you want to start developing your application, skip the next two sections and
 ## Architecture
 ### Coding Paradigm
 
-While as of now Combine is not built for use in an object-oriented fashion, with some of it's features not fully supporting objects (Ex. unit-testing), it is my full intention to support and encourage Object-Oriented development and the same is in the plans for the immediate future. 
-
-As of now, Combine can be used for quickly prototyping APIs etc, and offers a lot of features that work well with procedural or functional paradigms. That being said, it is still very usable for full-fledged applications, as we will see in 'Defining Components'  section, that it can have MVC architecture for developing apps.
+While as of now a few of Combine's features do not fully supporting objects (Ex. unit-testing), it is my full intention to support and encourage Object-Oriented development and the same is in the plans for the immediate future. Combine can be used for quickly prototyping APIs etc. While it offers a lot of features that work well with procedural or functional paradigms, it can have MVC architecture for developing apps as well.
 
 
 ### Directory Structure
@@ -142,12 +139,37 @@ Combine uses data (variables, arrays, json etc..) to form interpolated strings a
 Dependency injection is also used in calling functions which are defined as *handlers* for certain situations - Ex. HTTP route controllers. The dependency is declared implicitely by including it in the handler (controller function) definition. Combine *reflects* on the function to be able to send these values from various data stores - Ex. the combine router will decide routes based on availability of the dependencies that the route handler (controller) needs in it's function definition.
 
 
-## Components
+## Lazy Loading
+### Autoloading Classes
 
-Combine refers to a directory, or file, or a bunch of files as a *Component*. Components are used for writing modular code, lazy-loading etc. Combine offers features to define directories or files as components and load them as required at runtime. While it does not support class auto-loading (`spl_autoload_register`) yet, it is planned in the very next iteration.
+Combine facilitates a very flexible class to file autoloading relation. Combine's autoloader is fully compliant with PSR-0/4 spec. The class directory tree is user-defined, hence making is compliant to any current or future standards. The Combine autoloader uses the PHP function `spl_autoload_register()` to accomplish this feature.
+
+To register an autoloader for a class, call the static method `classify()`. This method take the following two parameters
+- *`string`* `$class` A fully qualified (and namespace'd) class name.
+- *`string`* `$path` A file path (directory and filename without the '.php' extension). Supports interpolation.
+
+Calling `classify()` will register the autoloader using `spl_autoload_register()` on Combine's static method `autoload()`. The autoloader allows variable namespace segments to be used for deducing the class file path. It can extract the value of the namespace as a variable and make it available for Ddependency Injection for creating the file path at runtime. The *extraction sigil* `:` is used to denote a variable namespace segment. The name of the variable is after the sigil. For example
+```php
+i::classify(":cls", "src/vendor/{{cls}}");
+$obj = new foo\bar();
+```
+
+The above code will extract the value of the namespace segment `:cls` and use it to form the file path 'src/vendor/foo/bar.php'. Note that the entire qualified namespace'd class name is present in the variable `cls`. The reason for this is that Combine will attach the trailing namespace / class segments to a variable if it occurs at the end of the `$class` string.
+
+Another example is
+```php
+i::classify("\\foo\\:cls", "src/vendor/{{cls | snake}}");
+$obj = new foo\bar\baz();
+```
+
+The above code will form the file path 'src/vendor/bar_baz.php' and autoload class `baz`. Note the use of the filter `snake` on the last namespace segment.
 
 
 ### Defining Components
+
+A well-designed class heirarchy and directory tree may not be available when you just want to prototype your application and focus on the business logic. Combine allows you to write procedural code and still be able to modularize it without needing a class. This is called a *Component*. 
+
+Combine refers to a directory, or file, or a bunch of files as a *Component*. Components are used for writing modular code, lazy-loading etc. Combine offers features to define directories or files as components and load them as required at runtime. While it does not support class auto-loading (`spl_autoload_register`) yet, it is planned in the very next iteration.
 
 A Component is defined by calling the static method `component` of the Combine class. It takes 3 parameters - 
 - `*string* $component_type` Defines the type of the component. It is used when loading components of this type.
@@ -192,12 +214,6 @@ This string denotes a function `func` present inside the 'somdemodulename' modul
 This assumes that the variables `component_nam` and `func_name` are available to be injected.
 
 
-
-### Autoloading Classes
-
-While not supported as of yet, it the very next feature planned and will be able to offer flexible autoloading with minimal coding. It will utilize same concepts as components
-
-
 ### Examples
 
 A few use case scenarios are
@@ -238,7 +254,7 @@ i::plugin("someplugin");
 HTTP Routes are defined by calling the static method `route` of the Combine class. The following parameters are accepted
 - `*int* $httpmethods` Defined which HTTP methods this route supports - can be used for RESTful routing. It is a combination of the following flag constants defined in the *helper.php* file - `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `OPTIONS`, `HEAD` and `CONNECT`
 - `*string* $url` The templated URL to match for this route.
-- `*mixed* $handler` The handler for this route. Interpolated. Can also accept a lambda function.
+- `*mixed* $handler` The handler for this route. Supports interpolation. Can also accept a lambda function.
 - `*int* $opts` Options (constant flags) on how to handle the routing, which can be a combination of the following
 	- `CHILD` Default. This means this is a child route.
 	- `BASE` This is the parent of other nested routes. Undefined routes or fallbacks can happen to this route.
@@ -252,7 +268,7 @@ HTTP Routes are defined by calling the static method `route` of the Combine clas
 	- `COOKIES` Make cookies available.
 - `*string* $router` Optional. You can define routes on different routers and chain them together using this. This defines the name of the router to define the route on. Defaults to `Null`.
 
-Combine router allows variable segments to be used for routing. It can also extract the value of the segment as a variable and make it available for Ddependency Injection for the handler string or the handler itself. The *extraction sigil* `:` is used to denote a variable segment in a route URL. The name of the variable is after the sigil. For example
+Combine router allows variable segments to be used for routing. It can also extract the value of the segment as a variable and make it available for Ddependency Injection for the handler string or the handler itself. This is similar to how the Combine autoloader for classes work. The *extraction sigil* `:` is used to denote a variable segment in a route URL. The name of the variable is after the sigil. For example
 ```php
 i::route(GET, "app/:var/something", "module > somemodulename > {{var}}");
 ```
