@@ -223,6 +223,7 @@
 			$depth = 0;
 			$vars = [];
 			$level = &self::$autoloads;
+			$is_var_named = false;
 
 			// Traverse down, creating the tree
 			while($depth < count($segments)) {
@@ -236,14 +237,14 @@
 
 					// Is named var ?								
 					if (strlen($segment) > 1) {
+						$is_var_named = true;
 						$var = substr($segment, 1);
-						if (in_array($var, $vars)) self::error("Autoloader error", "Namespace variable (".$var.") used more than once in qualified namespace/class ".$class);
-					}
 
-					// unnamed var not allwed
-					else self::error("Autoloader error", "Unnamed namespace variable in qualified namespace/class ".$class);			
+						// Check already used segment variable
+						if (in_array($var, $vars)) self::error("Autoloader error", "Namespace segment variable (".$var.") used more than once in class ".$class);
+					}						
 					
-					// Add to var to segment variables array, mark this namespace as variadic
+					// Add to var to segment variables array, mark this segment as variadic
 					$vars[] = $var;
 					$segment = "*";						
 				}
@@ -257,9 +258,9 @@
 				$depth ++;
 			}
 
-			// At correct depth now - Add the path, vars
-			$level["path"] = $path;		
-			$level["vars"] = $vars;
+			// At correct depth now - Add the path and vars
+			$level["path"] = $path;
+			$level["vars"] = $is_var_named ? $vars : [];
 		}
 
 		// This is used as an autoloading logic to match the class routing tree
@@ -281,7 +282,7 @@
 			$presets = [ '%tail%' => '' ];
 
 			// Helper for dependency injection
-			$inject = function($vars, $vals, $presets, $trail = null) {
+			$inject = function(&$vars, &$vals, &$presets, $trail = null) {
 				
 				// Prep
 				$params_interpolate = [];
