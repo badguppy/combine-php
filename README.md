@@ -22,28 +22,28 @@ Planned features -
 ## Using Combine
 Table of Contents
 
-- Getting Started
-- Design Principles
+- [Getting Started](#Getting-Started)
+- [Design Principles](#Design-Principles)
 
-- Architecture
-	- Coding Paradigms
-	- Application Directory Structure
+- [Architecture](#Architecture)
+	- [Coding Paradigms](#Coding-Paradigms)
+	- [Application Directory Structure](#Application-Directory-Structure)
 
-- Concepts
-	- Late Binding Through Interpolation
-	- Dependency Injection
+- [Concepts](#Concepts)
+	- [Late Binding Through Interpolation](#Late-Binding-Through-Interpolation)
+	- [Dependency Injection](#Dependency-Injection)
 
-- Lazy Loading
-	- Autoloading Classes
-	- Defining Components
-	- Loading Components
-	- Components & Handlers	
-	- Examples	
+- [Lazy Loading](#Lazy Loading)
+	- [Autoloading Classes](#Autoloading-Classes)
+	- [Defining Components](#Defining-Components)
+	- [Loading Components](#Loading-Components)
+	- [Components & Handlers](#Components-&-Handlers)
+	- [Examples](#Examples)
 	
-- Routes
-	- Defining HTTP Routes
-	- Serving HTTP Requests
-	- Examples
+- [Routes](#Routes)
+	- [Defining HTTP Routes](#Defining-HTTP-Routes)
+	- [Serving HTTP Requests](#Serving-HTTP-Requests)
+	- [Examples](#Examples)
 	
 - Hooks
 	- Intercepting Function Calls
