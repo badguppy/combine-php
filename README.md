@@ -22,28 +22,27 @@ Planned features -
 ## Using Combine
 Table of Contents
 
-- [Getting Started](#Getting-Started)
-- [Design Principles](#Design-Principles)
+- [Getting Started](#getting-started)
+- [Design Principles](#design-principles)
 
-- [Architecture](#Architecture)
-	- [Coding Paradigms](#Coding-Paradigms)
-	- [Application Directory Structure](#Application-Directory-Structure)
+- [Architecture](#architecture)
+	- [Coding Paradigms](#coding-paradigms)
+	- [Application Directory Structure](#application-directory-structure)
 
 - [Concepts](#Concepts)
-	- [Late Binding Through Interpolation](#Late-Binding-Through-Interpolation)
-	- [Dependency Injection](#Dependency-Injection)
+	- [Late Binding Through Interpolation](#late-binding-through-interpolation)
+	- [Dependency Injection](#dependency-injection)
 
-- [Lazy Loading](#Lazy Loading)
-	- [Autoloading Classes](#Autoloading-Classes)
-	- [Defining Components](#Defining-Components)
-	- [Loading Components](#Loading-Components)
-	- [Components & Handlers](#Components-&-Handlers)
-	- [Examples](#Examples)
+- [Lazy Loading](#lazy-loading)
+	- [Autoloading Classes](#autoloading-classes)
+	- [Defining Components](#defining-components)
+	- [Loading Components](#loading-components)
+	- [Components & Handlers](#components--handlers)
+	- [Examples](#examples)
 	
 - [Routes](#Routes)
-	- [Defining HTTP Routes](#Defining-HTTP-Routes)
-	- [Serving HTTP Requests](#Serving-HTTP-Requests)
-	- [Examples](#Examples)
+	- [Defining HTTP Routes](#defining-http-routes)
+	- [Serving HTTP Requests](#serving-http-requests)
 	
 - Hooks
 	- Intercepting Function Calls
