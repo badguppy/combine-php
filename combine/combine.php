@@ -1,56 +1,121 @@
 <?php
 
+	/**
+	* Combine Web Framework 0.2
+	* PHP version 7.1.0
+	*
+	* MIT License	
+	* Copyright (c) 2017 Soumik Chatterjee
+	*
+	* @author     Soumik Chatterjee <soumik.chat@hotmail.com>
+	* @copyright  2017 Soumik Chatterjee
+	* @license    https://github.com/badguppy/combine-php/blob/master/LICENSE MIT License
+	* @link       https://github.com/badguppy/combine-php
+	*
+	* Permission is hereby granted, free of charge, to any person obtaining a copy
+	* of this software and associated documentation files (the "Software"), to deal
+	* in the Software without restriction, including without limitation the rights
+	* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	* copies of the Software, and to permit persons to whom the Software is
+	* furnished to do so, subject to the following conditions:
+	* 
+	* The above copyright notice and this permission notice shall be included in all
+	* copies or substantial portions of the Software.
+	* 
+	* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	* SOFTWARE.	
+	*/
+
 	// PHP Version check
-	if (version_compare(PHP_VERSION, '7.0.0', '<')) die('Combine requires PHP 7.0.0 or higher!');
+	if (version_compare(PHP_VERSION, '7.1.0', '<')) die('Combine requires PHP 7.1.0 or higher!');
 
 	// Green to Go!
 	define("COMBINE_VERSION", "1.0");
 
-	// Combine Class
+	/**
+	* The Combine Class
+	* 
+	* All framework features are implemented as static methods of this class. 
+	* Functional unit-testing can be done by calling user-defined functions statically on this class.
+	*/
 	abstract class Combine {
-
-		// Static class
-		// ------------------------------------------------
 
 		private function __construct() {}
 		private function __clone() {}
 		private function __wakeup() {}
-
+		
+		// ------------------------------------------------
 		// Helpers
 		// ------------------------------------------------
 
-		// This functions takes a URL string and returns a snake-cased string
+		/**
+		* This method takes a string and returns a snake lower-cased string.
+		* @param string $str The string to transform.
+		* @param char $c The character to replace with underscore. Defaults to '/'
+		* @return string
+		*/
 		public static function snake(string $str, string $c = "/"): string {
 			return str_replace($c, "_", strtolower(trim($str, "/\\ ")));
 		}
 
-		// This functions takes a URL string and returns a camel-cased string
+		/**
+		* This method takes a string and returns a camel-cased string.
+		* @param string $str The string to transform.
+		* @param char $c The character to serve as the word boundary. Defaults to '/'
+		* @return string
+		*/
 		public static function camel(string $str, string $c = "/"): string {
 			return lcfirst(self::pascal($str, $c));
 		}
 
-		// This functions takes a URL string and returns a snake-cased string
+		/**
+		* This method takes a string and returns a pascal-cased string.
+		* @param string $str The string to transform.
+		* @param char $c The character to serve as the word boundary. Defaults to '/'
+		* @return string
+		*/
 		public static function pascal(string $str, string $c = "/"): string {
 			return str_replace($c, "", ucwords(strtolower(trim($str, "/\\ ")), $c));
 		}
 
-		// This determines if the given var is an associative array
+		/**
+		* This method determines if the given var is an associative array.
+		* @param mixed $var The variable to check.
+		* @return bool
+		*/
 		public static function is_assoc($var): bool {
 			return (is_array($var) && (array_values($var) !== $var));
 		}
 
-		// This will sanitize a url
+		/**
+		* This method sanitizes an URL string.
+		* @param string $url The URL string to sanitize.
+		* @return string
+		*/
 		public static function str_url(string $url): string {
 			return preg_replace('#/+#', "/", trim(str_replace("\\", "/", str_replace("..", "", $url)), "/ "));
 		}
 
-		// This determines if the given var is a lambda expression 
+		/**
+		* This method determines if the given var is a lambda (anonymous function).
+		* @param mixed $var The variable to check.
+		* @return bool
+		*/
 		public static function is_lambda(&$var): bool {
 			return ($var instanceof Closure);
 		}
 
-		// This will load a PHP file
-		private static function php($path, $once = true) {
+		/**
+		* This method loads a php file.
+		* @param string $path The path to the file including the file extension to include.
+		* @param bool $once Do 'require_once' or 'require' ?
+		*/
+		private static function php(string $path, bool $once = true) {
 			if (!file_exists($path)) self::error("Loader error", "File not found - ".$path);
 			else {
 				if ($once) require_once $path;
@@ -58,7 +123,11 @@
 			}
 		}
 
-		// This will load all PHP files inside a directory
+		/**
+		* This method loads all .php files inside a directory. Non-recursively.
+		* @param string $dir the directory path.
+		* @param bool $once Do 'require_once' or 'require' ?
+		*/
 		public static function require_dir(string $dir, $once = false) {
 			if (!file_exists($dir)) self::error("Loader error", "Directory not found - ".$dir);
 			
@@ -68,16 +137,28 @@
 			}
 		}
 
-		// This will load all PHP files inside a directory once
+		/**
+		* This method loads all .php files inside a directory by doing a 'require_once'. Non-recursively.
+		* @param string $dir the directory path.
+		*/
 		public static function require_dir_once(string $dir) {
 			self::require_dir($dir, true);
 		}
 
-		// Interpolator sigil and delimiter
+		/**
+		* These constants mark the interpolation boundary.
+		* @var string
+		*/
 		const INTERPOLATOR_SIGIL = "{{";
 		const INTERPOLATOR_DELIM = "}}";
 
-		// This takes in a string and replaces the variable templates with values from data store
+		/**
+		* This method takes a string and interpolates values from a key-value array.
+		* @param string $str The string to interpolate
+		* @param array $params The key-value array from which to obtain the data.
+		* @param bool $strict Strict mode. If true, throws an error if a key cannot be interpolated. Else replaces the key by empty string. Defaults to 'false'.
+		* @return string 
+		*/
 		public static function interpolate(string $str, array $params, bool $strict = false): string {
 			$str_new = "";
 			$pos_curr = 0;
@@ -128,36 +209,60 @@
 			return $str_new;
 		}
 
-		// Combine operation mode
+		// ------------------------------------------------
+		// Misc Configuration
+		// ------------------------------------------------
+
+		/**
+		* This property sets the production mode. If 'true', it suppressing certain logger messages.
+		* @property bool
+		*/
 		public static $production = false;
 
-		// Index.php location
+		/**
+		* These properties set the local path and the web URL of the application. Essential for proper routing.
+		* @property string
+		*/
 		public static $url_local = "";
 		public static $url_web = "";
 
-		// Lazy Loaders
+		// ------------------------------------------------
+		// Lazy-Loader
 		// ------------------------------------------------
 
 		// Component registry
-		public static $components;
+		private static $components;
 
-		// Default component loading logic
+		/**
+		* These constants define the loading logic for a component.
+		* @var string
+		*/
 		const LOAD_FILE = 1;
 		const LOAD_DIR = 2;
 		const LOAD_ONCE = 4;	
 		const LOAD_NAMESPACE = 8; // Not implemented !
 
-		// This function will define a component and its directory loading logic
-		public static function component(string $component_type, $path = null, $logic = self::LOAD_DIR | self::LOAD_ONCE) {
+		/**
+		* This method defines a component and it's loading logic.
+		* @param string $component_type A string that categorizes (names) all components of this type. 
+		* @param string $path The directory or file path (without .php extension) of components of this type. Supports interpolation. Defaults to same value as $component_type.
+		* @param mixed $logic Can be - a lambda / a combination of LOAD_* flags or a qualified handler string.
+		*/
+		public static function component(string $component_type, string $path = null, $logic = self::LOAD_DIR | self::LOAD_ONCE) {
 			self::$components[$component_type] = [
 				"path" => isset($path) ? trim($path, "\\/ ") : $component_type,
 				"logic" => &$logic
 			];			
 		}	
 
-		// This will load the given component
-		public static function load(string $component_type, string $component_name, $buffer = false) {
-			if (!isset(self::$components[$component_type])) self::error("logic error","Unknown component type - ".$component_type." (".$component_name.")");
+		/**
+		* This method loads a component.
+		* @param string $component_type A string that identifies the loading logic for all components of this type. 
+		* @param string $component_name The name of the component.
+		* @param bool $buffer DEPRECATED
+		*/
+		public static function load(string $component_type, string $component_name, bool $buffer = false) {
+			if (!isset(self::$components[$component_type])) self::error("Loader error", "Unknown component type - ".$component_type." (".$component_name.")");
 
 			else {
 				if ($buffer) ob_start();
@@ -202,11 +307,15 @@
 			}
 		}
 
-		// Class registry
-		public static $autoloads = [];
+		// Class autoloader registry
+		private static $autoloads = [];
 		private static $autoload_registered = false;
 
-		// This function defines an class autoloading route
+		/**
+		* This method is used to define an autoloader for a class/interface etc.
+		* @param string $class A string that represents the fully-qualified and namespace'd class name. Leading slash is optional. First namespace is considered global.
+		* @param string $path The directory or file path (without .php extension) of classes to be loaded by this autoloader. Supports interpolation.
+		*/
 		public static function classify(string $class, string $path) {
 			
 			// Register autoloader
@@ -263,7 +372,10 @@
 			$level["vars"] = $is_var_named ? $vars : [];
 		}
 
-		// This is used as an autoloading logic to match the class routing tree
+		/**
+		* This method is used autoload a class. Combine registers it via the 'spl_autoload_register'.
+		* @param string $class A string that represents the fully-qualified and namespace'd class to load. Leading slash is optional.
+		*/
 		public static function autoload(string $class) {
 
 			// Remove preceding slash if any		
@@ -393,23 +505,33 @@
 			if (!self::$production) self::log("Autoloader warning", "Could not find path for ".$class);
 		}
 
+		// ------------------------------------------------
 		// Router
 		// ------------------------------------------------
 
-		// Waypoint types
+		/**
+		* These flags control the routing logic for a route.
+		* @var int
+		*/
 		const ROUTE_CHILD = 0; // This is a child route - no fallbacks to this route
 		const ROUTE_BASE = 1; // This is a base route fallback for all nested child routes
 		const ROUTE_BASE_REDIRECT = 2; // Fallback requires HTTP redirect to its URL
 		const ROUTE_BASE_TAIL = 4; // Fallback must add trailing URL to last variable
 		const ROUTE_HALT = 8; // There will be no fallbacks from this route
 
-		// Parameterize HTTP variables when calling handler
+		/**
+		* These flags define the HTTP request entities from which dependencies can be injected.
+		* @var int
+		*/
 		const HTTP_VARS_NONE = 0;
 		const HTTP_VARS_GET = 1;
 		const HTTP_VARS_POST = 2;
 		const HTTP_VARS_COOKIE = 4;
 
-		// Request HTTP method types
+		/**
+		* These flags define which HTTP methods can be handled by a route.
+		* @var int
+		*/
 		const HTTP_METHOD_GET = 1;		
 		const HTTP_METHOD_POST = 2;
 		const HTTP_METHOD_PUT = 4;
@@ -419,16 +541,27 @@
 		const HTTP_METHOD_HEAD = 64;
 		const HTTP_METHOD_CONNECT = 128;
 
-		// Segment variable sigil
+		/**
+		* This constant defines the symbol used to mark a segment as variable.
+		* @var int
+		*/
 		const EXTRACTOR_SIGIL = ":";		
 
-		// Routes registry
+		/**
+		* This is the property that holds all the routers and their methods and corresponding route trees. It is made public so that caching can be implemented by the application, if required.
+		* @property array
+		*/
 		public static $routes = [];
 
-		// This will create a new route tree or attach to an existing tree
-		// The routing tree can be specified by the $router parameter
-		// Expects a single formed tree representedby an associative array of the format ["segment": [handler: "", "/": [...]]]
-		// Handler is a callable (string or lamba) or a qualified callable (string in the format of component_type.component_name.function_name)
+		/**
+		* This method defined a route.
+		* @param int $httpmethods Flags to indicate which HTTP request methods this route will handle.
+		* @param string $url The URL of this route. Do NOT include the website's base URL. Include everthing AFTER the website's base URL.
+		* @param mixed $handler Can be - a lambda / a callable / a qualified handler string.
+		* @param int $waypoint Flags to indicate how to handle routing logic for nested routes that attempt fall back to this route. Defaults to 'CHILD'.
+		* @param int $httpvars Flags to indicate which HTTP request entities will be available for dependency injection. Defaults to 'GET | POST'.
+		* @param string $router Name of the router. Defaults to an empty string or 'null'.
+		*/
 		public static function route(int $httpmethods, string $url, $handler, int $waypoint = self::ROUTE_CHILD, int $httpvars = self::HTTP_VARS_GET | self::HTTP_VARS_POST, string $router = null) {
 
 			// Form methods array
@@ -519,7 +652,12 @@
 			}		
 		}
 
-		// This will map an url to a registered route handler
+		/**
+		* This method serves a HTTP request based on the routes defined.
+		* @param int $httpmethods A single flag to indicate which HTTP request methods this will mimic. Defaults to PHP superglobal '$_SERVER["REQUEST_METHOD"]'.
+		* @param string $url The requested URL. Defaults to PHP superglobal '$_SERVER["REQUEST_URI"]'. If overriden, must NOT include the website's base URL.
+		* @param string $router Name of the router to use.
+		*/
 		public static function serve(int $httpmethod = null, string $url = null, string $router = null) {
 			
 			// Prep method
@@ -849,7 +987,8 @@
 			}
 		}		
 
-		// Hooks, function call interception & manipulation
+		// ------------------------------------------------
+		// Interceptor
 		// ------------------------------------------------
 
 		// This character is used to separate component type, name and function for qualified handler string
@@ -857,7 +996,7 @@
 
 		// This will load associated components for a handler from a qualified handler and return the callable
 		// If no callable is specified, it will return an empty lambda
-		public static function qualify(&$handler, array $params_interpolate = []) {
+		private static function qualify(&$handler, array $params_interpolate = []) {
 			
 			// Lambda
 			if (self::is_lambda($handler)) return $handler;
@@ -903,7 +1042,7 @@
 		}
 
 		// This will re-arrange arguements in the order the given function accepts them
-		public static function marshall(&$fn, array $params, array $params_opt = [], bool $strict = false): array {
+		private static function marshall(&$fn, array $params, array $params_opt = [], bool $strict = false): array {
 			
 			// Prep
 			$refFunc;
@@ -1072,7 +1211,7 @@
 		}
 		
 		// Hooks registry
-		public static $hooks;
+		private static $hooks;
 
 		// This will hook and intercept a global function call.
 		public static function hook(string $fn, &$handler, int $priority = 10) {
