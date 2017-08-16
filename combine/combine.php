@@ -320,7 +320,7 @@
 			$load = function(&$level_namespace) use (&$class, &$segments, &$depth, &$vals, &$presets, &$is_trail_var, &$inject) {
 				try {
 
-					$trail = ($is_trail_var && ($depth > 0)) ? implode("/", array_slice($segments, $depth)) : null;
+					$trail = ($is_trail_var && ($depth > 0) && ($depth < count($segments) - 1)) ? implode("/", array_slice($segments, $depth + 1)) : null;
 					$_presets = $presets;
 					$_presets["%tail%"] = $trail ?? '';
 					$params_interpolate = $inject($level_namespace["vars"], $vals, $_presets, $trail);
@@ -378,6 +378,7 @@
 
 				// Ran out of routes - Was last matched segment variadic and handled ??
 				else {
+					$depth --; // Go back to previously matched depth
 					if ($is_trail_var && isset($level_namespace["path"])) $load($level_namespace);
 					else if (!self::$production) self::log("Autoloader error", "Could not find path for ".$class);
 					return;
