@@ -1297,7 +1297,7 @@
 		const HOOK_POST = 2;
 
 		/**
-		* This method will install a hook on a user function.
+		* This method will install a hook on a user function or an event (prefixed with '@')
 		* @param string $fn The name of the function to be intercepted.
 		* @param mixed $handler Can be - a lambda / a user function / a handler string.
 		* @param int $stage - A flag indicating pre-execution or post execution. Default to 'POST'.
@@ -1356,13 +1356,14 @@
 		}
 
 		/**
-		* This setting allows handler chaining, but loses pass-by-reference ability.
+		* Setting this property to 'true' allows handler chaining, but loses pass-by-reference ability.
 		* @property bool
 		*/
 		public static $chaining = false;
 
 		/**
 		* This method intercepts user functions called as static methods.
+		* It can also be used to broadcast events by prefixing the function name with '@'
 		*/
 		public static function __callStatic(string $exp, array $args) {
 
@@ -1376,8 +1377,15 @@
 
 			// Check if function exists and is not a lambda - qualify returns lambda on empty callables
 			$fn = self::qualify($exp);
-			if (!is_callable($fn)) self::error("Interceptor error", "Function not found - ".$fn);
-			if (self::is_lambda($fn)) return;
+			$event = false;
+			if (!is_callable($fn)) {
+				if (is_string($fn)) {
+					if ($fn[0] == "@") $event = true;
+					else self::error("Interceptor error", "Function not found - ".$fn);
+				}
+				else self::error("Interceptor error", "Function not found - ".$fn);
+			}
+			else if (self::is_lambda($fn)) return;
 			
 			// Pre-execution hooks
 			$stage = "pre";
@@ -1403,10 +1411,12 @@
 				}
 			}
 
-			// Call actual function
+			// Call actual function if it is not an event
 			$res = null;
-			try { $res = $fn(...$args); }
-			catch (Exception $e) { self::error("Interceptor error", "Error '".($e->getMessage())."' executing ".$fn."(".implode(", ", $args).")"); }
+			if (!$event) {
+				try { $res = $fn(...$args); }
+				catch (Exception $e) { self::error("Interceptor error", "Error '".($e->getMessage())."' executing ".$fn."(".implode(", ", $args).")"); }
+			}
 
 			// Post-execution hooks
 			$stage = "post";
