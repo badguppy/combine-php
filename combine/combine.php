@@ -50,7 +50,7 @@
 		private function __wakeup() {}
 		
 		// ------------------------------------------------
-		// Helpers
+		// Filters
 		// ------------------------------------------------
 
 		/**
@@ -82,6 +82,39 @@
 		public static function pascal(string $str, string $c = "/"): string {
 			return str_replace($c, "", ucwords(strtolower(trim($str, "/\\ ")), $c));
 		}
+
+		/**
+		* This method takes a string and returns a PSR-0 standard class name string.
+		* @param string $str The string to transform.
+		* @return string
+		*/
+		public static function psr0(string $str): string {
+			$str = trim($str, "/\\ ");
+			$pos = strrpos($str, "\\");
+			$class = substr($str, $pos ? $pos + 1 : 0);
+			$class = str_replace("_", "/", $class);
+			return ($pos ? substr($str, 0, $pos)."/" : "").$class;
+		}
+
+		/**
+		* This method takes a string and returns a PSR-4 standard class name string.
+		* @param string $str The string to transform.
+		* @return string
+		*/
+		public static function psr4(string $str): string {
+			$str = trim($str, "/\\ ");
+
+			$segments = explode("\\", $str);
+			$last = count($segments) - 1;
+			$rest = implode("/", array_slice($segments, 0, $last));
+
+			if (substr($segments[$last], -4) == "Test") return $rest."/tests/".$segments[$last];
+			else return $rest."/src/".$segments[$last];
+		}
+
+		// ------------------------------------------------
+		// Helpers
+		// ------------------------------------------------
 
 		/**
 		* This method determines if the given var is an associative array.
@@ -230,11 +263,8 @@
 		// Lazy-Loader
 		// ------------------------------------------------
 
-		// Component registry
-		private static $components;
-
 		/**
-		* These constants define the loading logic for a component.
+		* These constants define the loading logic for a component or class.
 		* @var string
 		*/
 		const LOAD_FILE = 1;
@@ -242,13 +272,16 @@
 		const LOAD_ONCE = 4;	
 		const LOAD_NAMESPACE = 8; // Not implemented !
 
+		// Component registry
+		private static $components;
+
 		/**
 		* This method defines a component and it's loading logic.
 		* @param string $component_type A string that categorizes (names) all components of this type. 
 		* @param string $path The directory or file path (without .php extension) of components of this type. Supports interpolation. Defaults to same value as $component_type.
 		* @param mixed $logic Can be - a lambda / a combination of LOAD_* flags or a qualified handler string.
 		*/
-		public static function component(string $component_type, string $path = null, $logic = self::LOAD_DIR | self::LOAD_ONCE) {
+		public static function component(string $component_type, string $path = null, int $logic = self::LOAD_DIR | self::LOAD_ONCE) {
 			self::$components[$component_type] = [
 				"path" => isset($path) ? trim($path, "\\/ ") : $component_type,
 				"logic" => &$logic
@@ -315,8 +348,9 @@
 		* This method is used to define an autoloader for a class/interface etc.
 		* @param string $class A string that represents the fully-qualified and namespace'd class name. Leading slash is optional. First namespace is considered global.
 		* @param string $path The directory or file path (without .php extension) of classes to be loaded by this autoloader. Supports interpolation.
+		* @param int $logic 'DIR' or 'FILE' flag for loading logic. Defaults to FILE.
 		*/
-		public static function classify(string $class, string $path) {
+		public static function classify(string $class, string $path, int $logic = self::LOAD_FILE) {
 			
 			// Register autoloader
 			if (!self::$autoload_registered) {
@@ -367,9 +401,17 @@
 				$depth ++;
 			}
 
-			// At correct depth now - Add the path and vars
-			$level["path"] = $path;
-			$level["vars"] = $is_var_named ? $vars : [];
+			// At correct depth now - Add the path, vars and logic
+			if (isset($level["paths"])) {
+				$level["paths"][] = $path;
+				$level["logics"][] = $logic;
+				$level["vars"][] = $is_var_named ? $vars : [];
+			}
+			else {
+				$level["paths"] = [$path];
+				$level["logics"] = [$logic];
+				$level["vars"] = [$is_var_named ? $vars : []];
+			}
 		}
 
 		/**
@@ -394,7 +436,7 @@
 			$presets = [ '%tail%' => '' ];
 
 			// Helper for dependency injection
-			$inject = function(&$vars, &$vals, &$presets, $trail = null) {
+			$inject = function($vars, $vals, $presets, $trail = null) {
 				
 				// Prep
 				$params_interpolate = [];
@@ -430,25 +472,44 @@
 
 			// Helper to Autoload
 			$load = function(&$level_namespace) use (&$class, &$segments, &$depth, &$vals, &$presets, &$is_trail_var, &$inject) {
-				try {
 
-					$trail = ($is_trail_var && ($depth > 0) && ($depth < count($segments) - 1)) ? implode("/", array_slice($segments, $depth + 1)) : null;
-					$_presets = $presets;
-					$_presets["%tail%"] = $trail ?? '';
-					$params_interpolate = $inject($level_namespace["vars"], $vals, $_presets, $trail);
-					$path = self::interpolate($level_namespace["path"], $params_interpolate, true);
+				// Common prep
+				$trail = ($is_trail_var && ($depth > 0) && ($depth < count($segments) - 1)) ? implode("/", array_slice($segments, $depth + 1)) : null;
+				$_presets = $presets;
+				$_presets["%tail%"] = $trail ?? '';				
 
-				}
-				catch (Exception $e) {
-					if (!self::$production) self::log("Autoloader warning", "Could not interpolate path for ".$class." - '".($e->getMessage())."'");
-					return;
+				// Try each path
+				for ($count = 0; $count < count($level_namespace["paths"]); $count++) {
+
+					// Interpolate
+					$path = $level_namespace["paths"][$count];
+					try {		
+						$params_interpolate = $inject($level_namespace["vars"][$count], $vals, $_presets, $trail);
+						$path =  self::interpolate($path, $params_interpolate, true);
+						$path = self::str_url($path);	
+					}
+					catch (Exception $e) {
+						if (!self::$production) self::log("Autoloader warning", "Could not interpolate path for ".$class." - '".($e->getMessage())."'");
+						continue;
+					}
+	
+					// Load
+					if ($level_namespace["logics"][$count] & self::LOAD_FILE) {
+						$path .= '.php';
+						if (!file_exists($path)) {
+							if (!self::$production) self::log("Autoloader warning", "File ".$path." not found for autoloading ".$class);
+							continue;
+						}
+						else require_once $path;
+					} 
+					else self::require_dir_once($path);
+
+					// Check
+					if (class_exists($class) || interface_exists($class)) return;
 				}
 
-				$path = self::str_url($path).'.php';
-				if (!file_exists($path)) {
-					if (!self::$production) self::log("Autoloader warning", "File ".$path." not found for autoloading ".$class);
-				}
-				else require_once $path;
+				// Not done :()
+				if (!self::$production) self::log("Autoloader warning", "Could not autoload ".$class);
 			};
 
 			// Traverse down			
@@ -482,7 +543,7 @@
 
 					// Did we run out of more segments
 					if ($depth == count($segments) - 1) {
-						if (isset($level["path"])) $load($level);
+						if (isset($level["paths"])) $load($level);
 						else if (!self::$production) self::log("Autoloader error", "Could not find path for ".$class);
 						return;
 					}			
@@ -491,7 +552,7 @@
 				// Ran out of routes - Was last matched segment variadic and handled ??
 				else {
 					$depth --; // Go back to previously matched depth
-					if ($is_trail_var && isset($level_namespace["path"])) $load($level_namespace);
+					if ($is_trail_var && isset($level_namespace["paths"])) $load($level_namespace);
 					else if (!self::$production) self::log("Autoloader error", "Could not find path for ".$class);
 					return;
 				}
@@ -991,12 +1052,20 @@
 		// Interceptor
 		// ------------------------------------------------
 
-		// This character is used to separate component type, name and function for qualified handler string
+		/**
+		* This character is used to separate component type, name and function for qualified handler string
+		* @var int
+		*/
 		const QUALIFIER_SIGIL = '>';
 
-		// This will load associated components for a handler from a qualified handler and return the callable
-		// If no callable is specified, it will return an empty lambda
-		private static function qualify(&$handler, array $params_interpolate = []) {
+		/**
+		* This method loads associated components from a qualified handler string and return the callable.
+		* If no callable is specified, it will return an empty lambda
+		* @param mixed $handler Can be - a lambda / a user function / a handler string.
+		* @param array $params_interpolate - A key-value array for interpolation of string-ular handler.
+		* @return callable
+		*/
+		public static function qualify(&$handler, array $params_interpolate = []) {
 			
 			// Lambda
 			if (self::is_lambda($handler)) return $handler;
@@ -1041,8 +1110,15 @@
 			}
 		}
 
-		// This will re-arrange arguements in the order the given function accepts them
-		private static function marshall(&$fn, array $params, array $params_opt = [], bool $strict = false): array {
+		/**
+		* This method will reflect on a function or a method and marshall the provided data for calling the function or method.
+		* @param callable $fn The callable to be reflected upon.
+		* @param array $params - A key-value or numeric array for interpolation of string-ular handler.
+		* @param array $params_opt - A (associative only) array for filling parameters not filled by the $params array.
+		* @param bool $strict - If 'true', error will be thrown on unsuccessful marshalling. Else a 'null' arguement will be used.
+		* @return array
+		*/
+		public static function marshall(&$fn, array $params, array $params_opt = [], bool $strict = false): array {
 			
 			// Prep
 			$refFunc;
@@ -1213,13 +1289,26 @@
 		// Hooks registry
 		private static $hooks;
 
-		// This will hook and intercept a global function call.
-		public static function hook(string $fn, &$handler, int $priority = 10) {
+		/**
+		* These flags determine if the hooks are pre-execution or post-execution or both.
+		* @var int
+		*/
+		const HOOK_PRE = 1;		
+		const HOOK_POST = 2;
+
+		/**
+		* This method will install a hook on a user function.
+		* @param string $fn The name of the function to be intercepted.
+		* @param mixed $handler Can be - a lambda / a user function / a handler string.
+		* @param int $stage - A flag indicating pre-execution or post execution or both. Default to 'POST'.
+		* @param int $priority - Priority of the hook, amongst other hooks. Defaults to 'next available at 10'.
+		*/
+		public static function hook(string $fn, &$handler, int $stage = self::HOOK_POST, int $priority = 10) {
 
 			// Sanitize the hook - post execution by default !
 			if (($fn[0] != '_') && ($fn[strlen($fn) - 1] != '_')) $fn .= "_";
 
-			// Any hooks installed for this expression ??
+			// Any hooks installed for this function ??
 			if (isset(self::$hooks[$fn])) {
 
 				// Copy existing array
@@ -1333,6 +1422,7 @@
 			return $res;
 		}
 		
+		// ------------------------------------------------
 		// Logger
 		// ------------------------------------------------
 
@@ -1357,5 +1447,5 @@
 	}
 
 	// Helper
-	require_once __DIR__."/helper.php";	
+	include_once __DIR__."/helper.php";	
 ?>
