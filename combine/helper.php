@@ -27,4 +27,6 @@
 	const TAIL = Combine::ROUTE_BASE_TAIL;
 	const HALT = Combine::ROUTE_HALT;
 
+	const PRE = Combine::HOOK_PRE;
+
 ?>
