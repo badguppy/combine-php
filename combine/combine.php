@@ -345,7 +345,7 @@
 		private static $autoload_registered = false;
 
 		/**
-		* This method is used to define an autoloader for a class/interface etc.
+		* This method defines an autoloader for a class/interface etc.
 		* @param string $class A string that represents the fully-qualified and namespace'd class name. Leading slash is optional. First namespace is considered global.
 		* @param string $path The directory or file path (without .php extension) of classes to be loaded by this autoloader. Supports interpolation.
 		* @param int $logic 'DIR' or 'FILE' flag for loading logic. Defaults to FILE.
@@ -415,7 +415,7 @@
 		}
 
 		/**
-		* This method is used autoload a class. Combine registers it via the 'spl_autoload_register'.
+		* This method autoloads a class. Combine registers it via the 'spl_autoload_register'.
 		* @param string $class A string that represents the fully-qualified and namespace'd class to load. Leading slash is optional.
 		*/
 		public static function autoload(string $class) {
@@ -603,7 +603,7 @@
 		const HTTP_METHOD_CONNECT = 128;
 
 		/**
-		* This constant defines the symbol used to mark a segment as variable.
+		* This constant defines the symbol to mark a segment as variable.
 		* @var int
 		*/
 		const EXTRACTOR_SIGIL = ":";		
@@ -1053,7 +1053,7 @@
 		// ------------------------------------------------
 
 		/**
-		* This character is used to separate component type, name and function for qualified handler string
+		* This character separates component type, name and function for qualified handler string
 		* @var int
 		*/
 		const QUALIFIER_SIGIL = '>';
@@ -1290,7 +1290,7 @@
 		private static $hooks;
 
 		/**
-		* These flags determine if the hooks are pre-execution or post-execution or both.
+		* These flags determine if the hooks are pre-execution or post-execution.
 		* @var int
 		*/
 		const HOOK_PRE = 1;		
@@ -1300,20 +1300,21 @@
 		* This method will install a hook on a user function.
 		* @param string $fn The name of the function to be intercepted.
 		* @param mixed $handler Can be - a lambda / a user function / a handler string.
-		* @param int $stage - A flag indicating pre-execution or post execution or both. Default to 'POST'.
+		* @param int $stage - A flag indicating pre-execution or post execution. Default to 'POST'.
 		* @param int $priority - Priority of the hook, amongst other hooks. Defaults to 'next available at 10'.
 		*/
-		public static function hook(string $fn, &$handler, int $stage = self::HOOK_POST, int $priority = 10) {
+		public static function hook(string $fn, $handler, int $stage = self::HOOK_POST, int $priority = 10) {
 
-			// Sanitize the hook - post execution by default !
-			if (($fn[0] != '_') && ($fn[strlen($fn) - 1] != '_')) $fn .= "_";
+			// Prep
+			if ($stage & self::HOOK_PRE) $stage = "pre";
+			else $stage = "post";
 
 			// Any hooks installed for this function ??
-			if (isset(self::$hooks[$fn])) {
+			if (isset(self::$hooks[$fn][$stage])) {
 
 				// Copy existing array
-				$_hooks = self::$hooks[$fn];
-				self::$hooks[$fn] = [];
+				$_hooks = self::$hooks[$fn][$stage];
+				self::$hooks[$fn][$stage] = [];
 				$flag = false;
 				$pos = 0;
 
@@ -1325,20 +1326,20 @@
 
 						// Found proper posiion for new hook
 						if ($_priority > $priority) {
-							self::$hooks[$fn] []= [$priority => $handler];
+							self::$hooks[$fn][$stage] []= [$priority => $handler];
 							$flag = true;
 						}
 						else $pos ++;
 					}
 
 					// Add existing hook anyways
-					self::$hooks[$fn] []= $_hook;
+					self::$hooks[$fn][$stage] []= $_hook;
 				}
 
 				// Is new hook added ?
 				if (!$flag) {
-					self::$hooks[$fn] []= [$priority => $handler];
-					$pos = count(self::$hooks[$fn]) - 1;
+					self::$hooks[$fn][$stage] []= [$priority => $handler];
+					$pos = count(self::$hooks[$fn][$stage]) - 1;
 				}
 
 				// Return position of new hook
@@ -1346,18 +1347,23 @@
 			}
 
 			// This is the first hook for this expression
-			else self::$hooks[$fn] = [[$priority => $handler]];
+			else self::$hooks[$fn][$stage] = [[$priority => $handler]];
 		}
 
 		// This will remove the specified handler from intercepting a hooked global function call.
-		public static function unhook(string $fn, string $handler) {
+		private static function unhook(string $fn, string $handler) {
 			self::error("Interceptor error" ,"Unhook is not implemented");
 		}
 
-		// This setting allows handler chaining, at the cost of losing ability to send params & result of function call by reference to handlers.
+		/**
+		* This setting allows handler chaining, but loses pass-by-reference ability.
+		* @property bool
+		*/
 		public static $chaining = false;
 
-		// Function call interceptor
+		/**
+		* This method intercepts user functions called as static methods.
+		*/
 		public static function __callStatic(string $exp, array $args) {
 
 			// Check if component loader call 
@@ -1374,19 +1380,23 @@
 			if (self::is_lambda($fn)) return;
 			
 			// Pre-execution hooks
-			$pre = "_".$fn;
-			if (isset(self::$hooks[$pre]) && (count(self::$hooks[$pre]) > 0)) {
-				foreach(self::$hooks[$pre] as $hook) {
+			$stage = "pre";
+			if (isset(self::$hooks[$fn][$stage]) && (count(self::$hooks[$fn][$stage]) > 0)) {
+				foreach(self::$hooks[$fn][$stage] as $hook) {
 					$handler = self::qualify(array_values($hook)[0]);
 
 					if (!is_callable($handler))	self::log("Interceptor error", "Handler (".$handler.") not found for handling - ".$fn."(".implode(", ", $args).")"." pre-execution");
 					else {
 						try {
+							$pre_res = null;
 							if (self::$chaining) {
-								if (self::is_lambda($handler)) $handler($pre, ...$args);
-								else self::{$handler}($pre, ...$args);
+								if (self::is_lambda($handler)) $pre_res = $handler($fn, ...$args);
+								else $pre_res = self::{$handler}($fn, ...$args);
 							}
-							else $handler($pre, ...$args);
+							else $pre_res = $handler($fn, ...$args);
+
+							// Stop execution if pre-execs return false
+							if ($pre_res === false) return;
 						}
 						catch (Exception $e) { self::log("Interceptor error", "Handler (".$handler.") threw error '".($e->getMessage())."' handling - ".$fn."(".implode(", ", $args).")"." pre-execution"); }
 					}
@@ -1399,19 +1409,19 @@
 			catch (Exception $e) { self::error("Interceptor error", "Error '".($e->getMessage())."' executing ".$fn."(".implode(", ", $args).")"); }
 
 			// Post-execution hooks
-			$post = $fn."_";
-			if (isset(self::$hooks[$post]) && (count(self::$hooks[$post]) > 0)) {
-				foreach(self::$hooks[$post] as $hook) {
+			$stage = "post";
+			if (isset(self::$hooks[$fn][$stage]) && (count(self::$hooks[$fn][$stage]) > 0)) {
+				foreach(self::$hooks[$fn][$stage] as $hook) {
 					$handler = self::qualify(array_values($hook)[0]);
 
 					if (!is_callable($handler))	self::log("Interceptor error", "Handler (".$handler.") not found for handling - ".$fn."(".implode(", ", $args).")"." post-execution");
 					else {
 						try {
 							if (self::$chaining) {
-								if (self::is_lambda($handler)) $handler($post, $res, ...$args);
-								else self::{$handler}($post, $res, ...$args);
+								if (self::is_lambda($handler)) $handler($fn, $res, ...$args);
+								else self::{$handler}($fn, $res, ...$args);
 							}
-							else $handler($post, $res, ...$args);
+							else $handler($fn, $res, ...$args);
 						}
 						catch (Exception $e) { self::log("Interceptor error", "Handler (".$handler.") threw error '".($e->getMessage())."' handling - ".$fn."(".implode(", ", $args).")"." post-execution"); }
 					}
